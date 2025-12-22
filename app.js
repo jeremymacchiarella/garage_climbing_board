@@ -216,17 +216,17 @@ function renderHome() {
     const row = document.createElement("div");
     row.className = "thumbRow";
 
-    if (c.image && c.image.trim()) {
-      const thumb = document.createElement("div");
-      thumb.className = "thumb";
-      const img = document.createElement("img");
-      img.src = c.image;
-      img.alt = `${c.name || "Climb"} image`;
-      img.loading = "lazy";
-      thumb.appendChild(img);
-      thumb.addEventListener("click", () => openLightbox(c.image));
-      row.appendChild(thumb);
-    }
+    // if (c.image && c.image.trim()) {
+    //   const thumb = document.createElement("div");
+    //   thumb.className = "thumb";
+    //   const img = document.createElement("img");
+    //   img.src = c.image;
+    //   img.alt = `${c.name || "Climb"} image`;
+    //   img.loading = "lazy";
+    //   thumb.appendChild(img);
+    //   thumb.addEventListener("click", () => openLightbox(c.image));
+    //   row.appendChild(thumb);
+    // }
 
     const actions = document.createElement("div");
     actions.className = "smallActions";
