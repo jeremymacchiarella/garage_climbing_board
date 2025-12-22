@@ -1,25 +1,29 @@
-// ---------- Storage ----------
-const STORAGE_KEY = "garageBoardClimbs_v2"; // includes foot + image path
+/**
+ * Garage Board App
+ *
+ * Modes:
+ *  - Setter mode (local, e.g. http://localhost:8000): uses localStorage, can create/edit/delete,
+ *    can download climbs.json and climb images for publishing to GitHub Pages.
+ *  - Viewer mode (hosted, e.g. https://<user>.github.io/<repo>/): loads climbs from climbs.json,
+ *    disables/hides editing controls, shows climbs + images on phones.
+ */
 
-function loadClimbs() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveClimbs(climbs) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(climbs));
-}
+// ---------- Config ----------
+const STORAGE_KEY = "garageBoardClimbs_v2";
+const PUBLISHED_JSON_PATH = "climbs.json"; // in repo root
+const IMAGES_FOLDER = "climb-images"; // in repo root
 
 // ---------- Helpers ----------
+function isLocalDev() {
+  return (
+    location.hostname === "localhost" ||
+    location.hostname === "127.0.0.1" ||
+    location.protocol === "file:"
+  );
+}
+
 function defaultImagePath(id) {
-  // Predictable path you’ll commit to GitHub Pages
-  return `climb-images/${id}.png`;
+  return `${IMAGES_FOLDER}/${id}.png`;
 }
 
 function downloadTextFile(filename, text) {
@@ -32,6 +36,52 @@ function downloadTextFile(filename, text) {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+function loadClimbsLocal() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveClimbsLocal(climbs) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(climbs));
+}
+
+async function loadClimbsPublished() {
+  const res = await fetch(PUBLISHED_JSON_PATH, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Failed to load ${PUBLISHED_JSON_PATH}: ${res.status}`);
+  const data = await res.json();
+  if (!Array.isArray(data)) throw new Error("climbs.json is not an array");
+  return data;
+}
+
+function normalizeClimb(c) {
+  const out = { ...c };
+  out.id = String(out.id || "");
+  out.name = String(out.name || "");
+  out.grade = String(out.grade || "");
+  out.firstAscent = String(out.firstAscent || "");
+  out.createdAt = Number(out.createdAt) || Date.now();
+
+  out.start = Array.isArray(out.start) ? out.start : [];
+  out.mid = Array.isArray(out.mid) ? out.mid : [];
+  out.finish = Array.isArray(out.finish) ? out.finish : [];
+  out.foot = Array.isArray(out.foot) ? out.foot : [];
+
+  out.image = String(out.image || "");
+  if (!out.image && out.id) out.image = defaultImagePath(out.id);
+
+  return out;
+}
+
+function countMarks(c) {
+  return (c.start?.length || 0) + (c.mid?.length || 0) + (c.finish?.length || 0) + (c.foot?.length || 0);
 }
 
 // ---------- UI refs ----------
@@ -71,7 +121,23 @@ const els = {
   lightboxClose: document.getElementById("lightboxClose"),
 };
 
-let climbs = loadClimbs();
+// ---------- State ----------
+const SETTER_MODE = isLocalDev(); // local dev = setter mode; hosted = viewer mode
+let climbs = [];
+let currentType = "start";
+
+let draft = {
+  id: null,
+  name: "",
+  grade: "",
+  firstAscent: "",
+  image: "",
+  start: [],
+  mid: [],
+  finish: [],
+  foot: [],
+  createdAt: null,
+};
 
 // ---------- Routing ----------
 function setActiveNav(which) {
@@ -83,6 +149,7 @@ function showView(which) {
   const isHome = which === "home";
   els.homeView.classList.toggle("hidden", !isHome);
   els.createView.classList.toggle("hidden", isHome);
+
   els.subtitle.textContent = isHome ? "Climbs" : "Create climb";
   setActiveNav(which);
 
@@ -107,42 +174,17 @@ els.lightbox.addEventListener("click", (e) => {
   if (e.target === els.lightbox) closeLightbox();
 });
 
-// ---------- Home ----------
-function countMarks(c) {
-  return (c.start?.length || 0) + (c.mid?.length || 0) + (c.finish?.length || 0) + (c.foot?.length || 0);
-}
-
-function normalizeClimb(c) {
-  // Helps when older climbs exist (no foot/image)
-  const out = { ...c };
-  out.start = Array.isArray(out.start) ? out.start : [];
-  out.mid = Array.isArray(out.mid) ? out.mid : [];
-  out.finish = Array.isArray(out.finish) ? out.finish : [];
-  out.foot = Array.isArray(out.foot) ? out.foot : [];
-  out.id = String(out.id || "");
-  out.image = String(out.image || "");
-  out.createdAt = Number(out.createdAt) || Date.now();
-
-  // If missing image but has id, auto-fill (non-destructive)
-  if (!out.image && out.id) out.image = defaultImagePath(out.id);
-
-  return out;
-}
-
+// ---------- Home render ----------
 function renderHome() {
-  // Normalize + persist once (so your JSON is consistent)
-  const normalized = climbs.map(normalizeClimb);
-  const changed = JSON.stringify(normalized) !== JSON.stringify(climbs);
-  climbs = normalized;
-  if (changed) saveClimbs(climbs);
-
   els.climbList.innerHTML = "";
 
   if (climbs.length === 0) {
     const empty = document.createElement("div");
     empty.style.color = "rgba(255,255,255,0.65)";
     empty.style.padding = "12px";
-    empty.textContent = "No climbs yet. Tap “Create climb” to add your first one.";
+    empty.textContent = SETTER_MODE
+      ? "No climbs yet. Tap “Create climb” to add your first one."
+      : "No climbs found. Make sure climbs.json is published in the repo root.";
     els.climbList.appendChild(empty);
     return;
   }
@@ -174,7 +216,6 @@ function renderHome() {
     const row = document.createElement("div");
     row.className = "thumbRow";
 
-    // Thumbnail if image exists
     if (c.image && c.image.trim()) {
       const thumb = document.createElement("div");
       thumb.className = "thumb";
@@ -197,27 +238,29 @@ function renderHome() {
       showView("create");
       loadClimbIntoEditor(c, { readOnly: true });
     });
-
-    const editBtn = document.createElement("button");
-    editBtn.type = "button";
-    editBtn.textContent = "Edit";
-    editBtn.addEventListener("click", () => {
-      showView("create");
-      loadClimbIntoEditor(c, { readOnly: false });
-    });
-
-    const delBtn = document.createElement("button");
-    delBtn.type = "button";
-    delBtn.textContent = "Delete";
-    delBtn.addEventListener("click", () => {
-      climbs = climbs.filter((x) => x.id !== c.id);
-      saveClimbs(climbs);
-      renderHome();
-    });
-
     actions.appendChild(viewBtn);
-    actions.appendChild(editBtn);
-    actions.appendChild(delBtn);
+
+    if (SETTER_MODE) {
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.textContent = "Edit";
+      editBtn.addEventListener("click", () => {
+        showView("create");
+        loadClimbIntoEditor(c, { readOnly: false });
+      });
+
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.textContent = "Delete";
+      delBtn.addEventListener("click", () => {
+        climbs = climbs.filter((x) => x.id !== c.id);
+        saveClimbsLocal(climbs);
+        renderHome();
+      });
+
+      actions.appendChild(editBtn);
+      actions.appendChild(delBtn);
+    }
 
     row.appendChild(actions);
 
@@ -229,45 +272,36 @@ function renderHome() {
   }
 }
 
-// Download climbs.json (real file)
-els.downloadClimbsBtn.addEventListener("click", () => {
-  const filename = "climbs.json";
-  const text = JSON.stringify(climbs, null, 2);
-  downloadTextFile(filename, text);
-});
+// ---------- Setter-only buttons ----------
+if (els.downloadClimbsBtn) {
+  els.downloadClimbsBtn.addEventListener("click", () => {
+    const text = JSON.stringify(climbs, null, 2);
+    downloadTextFile("climbs.json", text);
+  });
+}
 
-// Keep export box as well (optional convenience)
-els.exportClimbsBtn.addEventListener("click", () => {
-  els.climbsExportBox.value = JSON.stringify(climbs, null, 2);
-});
+if (els.exportClimbsBtn) {
+  els.exportClimbsBtn.addEventListener("click", () => {
+    els.climbsExportBox.value = JSON.stringify(climbs, null, 2);
+  });
+}
 
-els.clearClimbsBtn.addEventListener("click", () => {
-  const ok = confirm("Clear all climbs from this device?");
-  if (!ok) return;
-  climbs = [];
-  saveClimbs(climbs);
-  els.climbsExportBox.value = "";
-  renderHome();
-});
+if (els.clearClimbsBtn) {
+  els.clearClimbsBtn.addEventListener("click", () => {
+    if (!SETTER_MODE) return;
 
-// ---------- Create climb ----------
-let currentType = "start";
+    const ok = confirm("Clear all climbs from this device?");
+    if (!ok) return;
+    climbs = [];
+    saveClimbsLocal(climbs);
+    els.climbsExportBox.value = "";
+    renderHome();
+  });
+}
 
-let draft = {
-  id: null,
-  name: "",
-  grade: "",
-  firstAscent: "",
-  image: "",
-  start: [],
-  mid: [],
-  finish: [],
-  foot: [],
-  createdAt: null,
-};
-
+// ---------- Create/editor ----------
 function newId() {
-  return (crypto.randomUUID ? crypto.randomUUID() : `id_${Math.random().toString(16).slice(2)}`);
+  return crypto.randomUUID ? crypto.randomUUID() : `id_${Math.random().toString(16).slice(2)}`;
 }
 
 function setEditorReadOnly(readOnly) {
@@ -284,42 +318,12 @@ function setEditorReadOnly(readOnly) {
   els.typeButtons.forEach((b) => (b.disabled = readOnly));
 }
 
-function newDraft() {
-  const id = newId();
-  draft = {
-    id,
-    name: "",
-    grade: "",
-    firstAscent: "",
-    image: defaultImagePath(id), // ✅ auto-filled
-    start: [],
-    mid: [],
-    finish: [],
-    foot: [],
-    createdAt: Date.now(),
-  };
-
-  els.climbName.value = "";
-  els.climbGrade.value = "";
-  els.climbFA.value = "";
-  els.climbImagePath.value = draft.image; // ✅ auto-filled input
-  els.editMode.checked = true;
-
-  setEditorReadOnly(false);
-  setType("start");
-  renderDraft();
-}
-
 function setType(t) {
   currentType = t;
-  els.typeButtons.forEach((b) => {
-    b.classList.toggle("active", b.dataset.type === t);
-  });
+  els.typeButtons.forEach((b) => b.classList.toggle("active", b.dataset.type === t));
 }
 
-els.typeButtons.forEach((b) => {
-  b.addEventListener("click", () => setType(b.dataset.type));
-});
+els.typeButtons.forEach((b) => b.addEventListener("click", () => setType(b.dataset.type)));
 setType("start");
 
 function clamp01(v) {
@@ -359,13 +363,12 @@ function pushPoint(type, pt) {
 }
 
 function popLastPoint() {
-  if (draft[currentType] && draft[currentType].length > 0) {
-    draft[currentType].pop();
-  }
+  if (draft[currentType] && draft[currentType].length > 0) draft[currentType].pop();
 }
 
 els.boardImage.addEventListener("click", (e) => {
   if (!els.editMode.checked) return;
+  if (!SETTER_MODE) return; // no placement on viewer mode
 
   const pt = boardToNormalized(e.clientX, e.clientY);
 
@@ -379,12 +382,14 @@ els.boardImage.addEventListener("click", (e) => {
 
 els.undoBtn.addEventListener("click", () => {
   if (!els.editMode.checked) return;
+  if (!SETTER_MODE) return;
   popLastPoint();
   renderDraft();
 });
 
 els.clearBtn.addEventListener("click", () => {
   if (!els.editMode.checked) return;
+  if (!SETTER_MODE) return;
   draft.start = [];
   draft.mid = [];
   draft.finish = [];
@@ -392,22 +397,46 @@ els.clearBtn.addEventListener("click", () => {
   renderDraft();
 });
 
-function loadClimbIntoEditor(climb, { readOnly } = { readOnly: false }) {
-  draft = normalizeClimb(JSON.parse(JSON.stringify(climb)));
+function newDraft() {
+  const id = newId();
+  draft = {
+    id,
+    name: "",
+    grade: "",
+    firstAscent: "",
+    image: defaultImagePath(id),
+    start: [],
+    mid: [],
+    finish: [],
+    foot: [],
+    createdAt: Date.now(),
+  };
 
-  // ✅ auto-fill image path if missing
-  if (!draft.image && draft.id) draft.image = defaultImagePath(draft.id);
+  els.climbName.value = "";
+  els.climbGrade.value = "";
+  els.climbFA.value = "";
+  els.climbImagePath.value = draft.image;
+
+  els.editMode.checked = true;
+  setEditorReadOnly(!SETTER_MODE); // viewer mode always read-only
+  setType("start");
+  renderDraft();
+}
+
+function loadClimbIntoEditor(climb, { readOnly } = { readOnly: true }) {
+  draft = normalizeClimb(JSON.parse(JSON.stringify(climb)));
 
   els.climbName.value = draft.name || "";
   els.climbGrade.value = draft.grade || "";
   els.climbFA.value = draft.firstAscent || "";
-  els.climbImagePath.value = draft.image || "";
+  els.climbImagePath.value = draft.image || defaultImagePath(draft.id);
 
-  setEditorReadOnly(readOnly);
+  // In viewer mode, always readonly no matter what.
+  setEditorReadOnly(!SETTER_MODE || readOnly);
   renderDraft();
 }
 
-// ---------- Image generation ----------
+// ---------- Image generation (setter mode only) ----------
 function colorForType(type) {
   if (type === "start") return "#22c55e";
   if (type === "mid") return "#3b82f6";
@@ -421,7 +450,6 @@ function drawOutlinedCircle(ctx, x, y, color) {
   const lineW = 3;
 
   ctx.save();
-
   ctx.shadowColor = "rgba(0,0,0,0.35)";
   ctx.shadowBlur = 8;
 
@@ -472,8 +500,10 @@ async function makeClimbCanvas() {
 }
 
 async function downloadClimbImage() {
+  if (!SETTER_MODE) return;
+
   const canvas = await makeClimbCanvas();
-  const filename = `${draft.id}.png`; // ✅ matches defaultImagePath()
+  const filename = `${draft.id}.png`; // matches climb-images/<id>.png
 
   canvas.toBlob((blob) => {
     if (!blob) return;
@@ -489,17 +519,19 @@ async function downloadClimbImage() {
 }
 
 els.downloadImgBtn.addEventListener("click", () => {
+  if (!SETTER_MODE) return;
   downloadClimbImage().catch(console.error);
 });
 
-// ---------- Save ----------
+// ---------- Save (setter mode only) ----------
 els.saveBtn.addEventListener("click", () => {
+  if (!SETTER_MODE) return;
+
   const name = (els.climbName.value || "").trim();
   const grade = (els.climbGrade.value || "").trim();
   const firstAscent = (els.climbFA.value || "").trim();
-
-  // image path can be overridden, but defaults are auto
-  const imagePath = (els.climbImagePath.value || "").trim() || defaultImagePath(draft.id);
+  const imagePath =
+    (els.climbImagePath.value || "").trim() || defaultImagePath(draft.id);
 
   if (!name) {
     alert("Please enter a name.");
@@ -519,19 +551,33 @@ els.saveBtn.addEventListener("click", () => {
   draft.firstAscent = firstAscent;
   draft.image = imagePath;
 
-  // upsert
   const idx = climbs.findIndex((c) => c.id === draft.id);
   if (idx >= 0) climbs[idx] = draft;
   else climbs.push(draft);
 
-  saveClimbs(climbs);
+  // Persist locally only (you publish via climbs.json)
+  saveClimbsLocal(climbs);
 
   showView("home");
   newDraft();
 });
 
 // ---------- Boot ----------
-function ensureExampleIfEmpty() {
+function applyModeUI() {
+  // In viewer mode, hide setter-only controls
+  if (!SETTER_MODE) {
+    // Hide create nav button + force home
+    els.createBtn.style.display = "none";
+
+    // Hide setter-only buttons
+    if (els.downloadClimbsBtn) els.downloadClimbsBtn.style.display = "none";
+    if (els.exportClimbsBtn) els.exportClimbsBtn.style.display = "none";
+    if (els.clearClimbsBtn) els.clearClimbsBtn.style.display = "none";
+    if (els.climbsExportBox) els.climbsExportBox.style.display = "none";
+  }
+}
+
+function ensureExampleIfEmptyLocal() {
   if (climbs.length > 0) return;
 
   const id = "p001";
@@ -542,17 +588,35 @@ function ensureExampleIfEmpty() {
       grade: "V2",
       firstAscent: "You",
       image: defaultImagePath(id),
-      start: [{ x: 0.25, y: 0.20 }],
+      start: [{ x: 0.25, y: 0.2 }],
       mid: [{ x: 0.55, y: 0.45 }],
-      finish: [{ x: 0.75, y: 0.30 }],
-      foot: [{ x: 0.30, y: 0.75 }],
+      finish: [{ x: 0.75, y: 0.3 }],
+      foot: [{ x: 0.3, y: 0.75 }],
       createdAt: Date.now(),
     },
   ];
-  saveClimbs(climbs);
+
+  saveClimbsLocal(climbs);
 }
 
-ensureExampleIfEmpty();
-renderHome();
-newDraft();
-showView("home");
+(async function boot() {
+  applyModeUI();
+
+  if (SETTER_MODE) {
+    climbs = loadClimbsLocal().map(normalizeClimb);
+    ensureExampleIfEmptyLocal();
+    climbs = loadClimbsLocal().map(normalizeClimb);
+    saveClimbsLocal(climbs); // normalize persisted
+  } else {
+    try {
+      climbs = (await loadClimbsPublished()).map(normalizeClimb);
+    } catch (e) {
+      console.error(e);
+      climbs = [];
+    }
+  }
+
+  renderHome();
+  newDraft();
+  showView("home");
+})();
