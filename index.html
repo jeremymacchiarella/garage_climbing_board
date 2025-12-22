@@ -26,9 +26,22 @@
         <div class="cardHeader">
           <div>
             <div class="cardTitle">All climbs</div>
-            <div class="cardSub">Create climbs on your setter device. Download climbs.json for GitHub.</div>
+            <div class="cardSub">Filter by grade. Setter device can download climbs.json for GitHub.</div>
           </div>
+
           <div class="rightActions">
+            <label class="filterLabel">
+              Min
+              <select id="minGradeSelect" class="filterSelect"></select>
+            </label>
+
+            <label class="filterLabel">
+              Max
+              <select id="maxGradeSelect" class="filterSelect"></select>
+            </label>
+
+            <button id="clearGradeFilterBtn" type="button">Clear filter</button>
+
             <button id="downloadClimbsBtn" type="button">Download climbs.json</button>
             <button id="exportClimbsBtn" type="button">Export to box</button>
             <button id="clearClimbsBtn" class="danger" type="button">Clear all</button>
@@ -111,7 +124,7 @@
         </div>
       </section>
 
-      <!-- Lightbox -->
+      <!-- Lightbox (still present, but Home no longer shows thumbnails) -->
       <div id="lightbox" class="lightbox hidden" role="dialog" aria-modal="true">
         <div class="lightboxInner">
           <button id="lightboxClose" class="lightboxClose" type="button">Close</button>

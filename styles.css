@@ -92,6 +92,24 @@ button.primary {
   outline: 2px solid rgba(59,130,246,0.25);
 }
 
+/* Grade filter styling */
+.filterLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.filterSelect {
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(0,0,0,0.20);
+  color: var(--text);
+  outline: none;
+}
+
 .climbList {
   padding: 12px;
   display: grid;
@@ -116,6 +134,7 @@ button.primary {
 }
 
 .climbName { font-weight: 800; }
+
 .badge {
   padding: 2px 8px;
   border-radius: 999px;
@@ -127,29 +146,6 @@ button.primary {
 .climbMeta {
   color: var(--muted);
   font-size: 13px;
-}
-
-.thumbRow {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  align-items: start;
-}
-
-.thumb {
-  width: 220px;
-  max-width: 100%;
-  border-radius: 12px;
-  border: 1px solid rgba(255,255,255,0.10);
-  overflow: hidden;
-  background: rgba(0,0,0,0.25);
-  cursor: pointer;
-}
-
-.thumb img {
-  width: 100%;
-  height: auto;
-  display: block;
 }
 
 .smallActions {
@@ -304,7 +300,7 @@ button.primary {
   line-height: 1.35;
 }
 
-/* Lightbox */
+/* Lightbox (still used if you later add thumbnails back) */
 .lightbox {
   position: fixed;
   inset: 0;

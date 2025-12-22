@@ -5,7 +5,7 @@
  *  - Setter mode (local, e.g. http://localhost:8000): uses localStorage, can create/edit/delete,
  *    can download climbs.json and climb images for publishing to GitHub Pages.
  *  - Viewer mode (hosted, e.g. https://<user>.github.io/<repo>/): loads climbs from climbs.json,
- *    disables/hides editing controls, shows climbs + images on phones.
+ *    disables/hides editing controls, shows climbs on phones.
  */
 
 // ---------- Config ----------
@@ -84,6 +84,94 @@ function countMarks(c) {
   return (c.start?.length || 0) + (c.mid?.length || 0) + (c.finish?.length || 0) + (c.foot?.length || 0);
 }
 
+// ---------- Grade filtering ----------
+function parseVGrade(gradeStr) {
+  // VB -> -1, V0 -> 0, V10 -> 10, etc. Null if not parseable.
+  if (!gradeStr) return null;
+  const s = String(gradeStr).trim().toUpperCase();
+
+  if (s === "VB") return -1;
+
+  // Accept "V5", "V10", "V5/6" (takes first), "V5+" (takes number)
+  const m = s.match(/^V\s*(-?\d+)/);
+  if (!m) return null;
+
+  const n = Number(m[1]);
+  return Number.isFinite(n) ? n : null;
+}
+
+let minGradeFilter = null; // null = Any
+let maxGradeFilter = null; // null = Any
+
+function populateGradeSelect(selectEl, { includeAny = true, maxV = 17 } = {}) {
+  if (!selectEl) return;
+  selectEl.innerHTML = "";
+
+  if (includeAny) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "Any";
+    selectEl.appendChild(opt);
+  }
+
+  // VB first
+  {
+    const opt = document.createElement("option");
+    opt.value = "-1";
+    opt.textContent = "VB";
+    selectEl.appendChild(opt);
+  }
+
+  for (let v = 0; v <= maxV; v++) {
+    const opt = document.createElement("option");
+    opt.value = String(v);
+    opt.textContent = `V${v}`;
+    selectEl.appendChild(opt);
+  }
+}
+
+function syncFilterUI() {
+  if (els.minGradeSelect) els.minGradeSelect.value = minGradeFilter === null ? "" : String(minGradeFilter);
+  if (els.maxGradeSelect) els.maxGradeSelect.value = maxGradeFilter === null ? "" : String(maxGradeFilter);
+}
+
+function wireGradeFilter() {
+  populateGradeSelect(els.minGradeSelect);
+  populateGradeSelect(els.maxGradeSelect);
+  syncFilterUI();
+
+  els.minGradeSelect?.addEventListener("change", () => {
+    const v = els.minGradeSelect.value;
+    minGradeFilter = v === "" ? null : Number(v);
+
+    // If min > max, clear max
+    if (minGradeFilter !== null && maxGradeFilter !== null && minGradeFilter > maxGradeFilter) {
+      maxGradeFilter = null;
+    }
+    syncFilterUI();
+    renderHome();
+  });
+
+  els.maxGradeSelect?.addEventListener("change", () => {
+    const v = els.maxGradeSelect.value;
+    maxGradeFilter = v === "" ? null : Number(v);
+
+    // If max < min, clear min
+    if (minGradeFilter !== null && maxGradeFilter !== null && maxGradeFilter < minGradeFilter) {
+      minGradeFilter = null;
+    }
+    syncFilterUI();
+    renderHome();
+  });
+
+  els.clearGradeFilterBtn?.addEventListener("click", () => {
+    minGradeFilter = null;
+    maxGradeFilter = null;
+    syncFilterUI();
+    renderHome();
+  });
+}
+
 // ---------- UI refs ----------
 const els = {
   subtitle: document.getElementById("subtitle"),
@@ -99,6 +187,10 @@ const els = {
   exportClimbsBtn: document.getElementById("exportClimbsBtn"),
   clearClimbsBtn: document.getElementById("clearClimbsBtn"),
   climbsExportBox: document.getElementById("climbsExportBox"),
+
+  minGradeSelect: document.getElementById("minGradeSelect"),
+  maxGradeSelect: document.getElementById("maxGradeSelect"),
+  clearGradeFilterBtn: document.getElementById("clearGradeFilterBtn"),
 
   board: document.getElementById("board"),
   boardImage: document.getElementById("boardImage"),
@@ -160,7 +252,7 @@ function showView(which) {
 els.homeBtn.addEventListener("click", () => showView("home"));
 els.createBtn.addEventListener("click", () => showView("create"));
 
-// ---------- Lightbox ----------
+// ---------- Lightbox (kept, but Home doesn't show thumbnails) ----------
 function openLightbox(src) {
   els.lightboxImg.src = src;
   els.lightbox.classList.remove("hidden");
@@ -178,18 +270,33 @@ els.lightbox.addEventListener("click", (e) => {
 function renderHome() {
   els.climbList.innerHTML = "";
 
-  if (climbs.length === 0) {
+  // Apply grade filtering
+  const filtered = climbs.filter((c) => {
+    if (minGradeFilter === null && maxGradeFilter === null) return true;
+
+    const g = parseVGrade(c.grade);
+    if (g === null) return false;
+
+    if (minGradeFilter !== null && g < minGradeFilter) return false;
+    if (maxGradeFilter !== null && g > maxGradeFilter) return false;
+    return true;
+  });
+
+  if (filtered.length === 0) {
     const empty = document.createElement("div");
     empty.style.color = "rgba(255,255,255,0.65)";
     empty.style.padding = "12px";
-    empty.textContent = SETTER_MODE
-      ? "No climbs yet. Tap “Create climb” to add your first one."
-      : "No climbs found. Make sure climbs.json is published in the repo root.";
+    empty.textContent =
+      climbs.length === 0
+        ? (SETTER_MODE
+            ? "No climbs yet. Tap “Create climb” to add your first one."
+            : "No climbs found. Make sure climbs.json is published in the repo root.")
+        : "No climbs match the current grade filter.";
     els.climbList.appendChild(empty);
     return;
   }
 
-  const sorted = [...climbs].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const sorted = [...filtered].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
   for (const c of sorted) {
     const card = document.createElement("div");
@@ -212,21 +319,6 @@ function renderHome() {
     const meta = document.createElement("div");
     meta.className = "climbMeta";
     meta.textContent = `First ascent: ${c.firstAscent || "—"} • Marks: ${countMarks(c)}`;
-
-    const row = document.createElement("div");
-    row.className = "thumbRow";
-
-    // if (c.image && c.image.trim()) {
-    //   const thumb = document.createElement("div");
-    //   thumb.className = "thumb";
-    //   const img = document.createElement("img");
-    //   img.src = c.image;
-    //   img.alt = `${c.name || "Climb"} image`;
-    //   img.loading = "lazy";
-    //   thumb.appendChild(img);
-    //   thumb.addEventListener("click", () => openLightbox(c.image));
-    //   row.appendChild(thumb);
-    // }
 
     const actions = document.createElement("div");
     actions.className = "smallActions";
@@ -262,11 +354,9 @@ function renderHome() {
       actions.appendChild(delBtn);
     }
 
-    row.appendChild(actions);
-
     card.appendChild(top);
     card.appendChild(meta);
-    card.appendChild(row);
+    card.appendChild(actions);
 
     els.climbList.appendChild(card);
   }
@@ -368,7 +458,7 @@ function popLastPoint() {
 
 els.boardImage.addEventListener("click", (e) => {
   if (!els.editMode.checked) return;
-  if (!SETTER_MODE) return; // no placement on viewer mode
+  if (!SETTER_MODE) return;
 
   const pt = boardToNormalized(e.clientX, e.clientY);
 
@@ -418,7 +508,7 @@ function newDraft() {
   els.climbImagePath.value = draft.image;
 
   els.editMode.checked = true;
-  setEditorReadOnly(!SETTER_MODE); // viewer mode always read-only
+  setEditorReadOnly(!SETTER_MODE);
   setType("start");
   renderDraft();
 }
@@ -431,7 +521,6 @@ function loadClimbIntoEditor(climb, { readOnly } = { readOnly: true }) {
   els.climbFA.value = draft.firstAscent || "";
   els.climbImagePath.value = draft.image || defaultImagePath(draft.id);
 
-  // In viewer mode, always readonly no matter what.
   setEditorReadOnly(!SETTER_MODE || readOnly);
   renderDraft();
 }
@@ -503,7 +592,7 @@ async function downloadClimbImage() {
   if (!SETTER_MODE) return;
 
   const canvas = await makeClimbCanvas();
-  const filename = `${draft.id}.png`; // matches climb-images/<id>.png
+  const filename = `${draft.id}.png`;
 
   canvas.toBlob((blob) => {
     if (!blob) return;
@@ -530,8 +619,7 @@ els.saveBtn.addEventListener("click", () => {
   const name = (els.climbName.value || "").trim();
   const grade = (els.climbGrade.value || "").trim();
   const firstAscent = (els.climbFA.value || "").trim();
-  const imagePath =
-    (els.climbImagePath.value || "").trim() || defaultImagePath(draft.id);
+  const imagePath = (els.climbImagePath.value || "").trim() || defaultImagePath(draft.id);
 
   if (!name) {
     alert("Please enter a name.");
@@ -555,7 +643,6 @@ els.saveBtn.addEventListener("click", () => {
   if (idx >= 0) climbs[idx] = draft;
   else climbs.push(draft);
 
-  // Persist locally only (you publish via climbs.json)
   saveClimbsLocal(climbs);
 
   showView("home");
@@ -564,12 +651,8 @@ els.saveBtn.addEventListener("click", () => {
 
 // ---------- Boot ----------
 function applyModeUI() {
-  // In viewer mode, hide setter-only controls
   if (!SETTER_MODE) {
-    // Hide create nav button + force home
     els.createBtn.style.display = "none";
-
-    // Hide setter-only buttons
     if (els.downloadClimbsBtn) els.downloadClimbsBtn.style.display = "none";
     if (els.exportClimbsBtn) els.exportClimbsBtn.style.display = "none";
     if (els.clearClimbsBtn) els.clearClimbsBtn.style.display = "none";
@@ -601,12 +684,13 @@ function ensureExampleIfEmptyLocal() {
 
 (async function boot() {
   applyModeUI();
+  wireGradeFilter();
 
   if (SETTER_MODE) {
     climbs = loadClimbsLocal().map(normalizeClimb);
     ensureExampleIfEmptyLocal();
     climbs = loadClimbsLocal().map(normalizeClimb);
-    saveClimbsLocal(climbs); // normalize persisted
+    saveClimbsLocal(climbs);
   } else {
     try {
       climbs = (await loadClimbsPublished()).map(normalizeClimb);
