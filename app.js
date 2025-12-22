@@ -100,6 +100,21 @@ function parseVGrade(gradeStr) {
   return Number.isFinite(n) ? n : null;
 }
 
+// Compare two climbs by parsed V-grade (increasing). Unparseable grades sort last.
+function compareClimbGrade(a, b) {
+  const ga = parseVGrade(a.grade);
+  const gb = parseVGrade(b.grade);
+
+  if (ga === null && gb === null) return 0;
+  if (ga === null) return 1;
+  if (gb === null) return -1;
+
+  if (ga !== gb) return ga - gb;
+
+  // Tie-breaker: older first (increasing createdAt)
+  return (a.createdAt || 0) - (b.createdAt || 0);
+}
+
 let minGradeFilter = null; // null = Any
 let maxGradeFilter = null; // null = Any
 
@@ -296,7 +311,7 @@ function renderHome() {
     return;
   }
 
-  const sorted = [...filtered].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const sorted = [...filtered].sort(compareClimbGrade);
 
   for (const c of sorted) {
     const card = document.createElement("div");
