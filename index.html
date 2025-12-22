@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Garage Board</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="title">Garage Board</div>
+        <div class="subtitle" id="subtitle">Climbs</div>
+      </div>
+
+      <nav class="nav">
+        <button id="homeBtn" class="navBtn active" type="button">Home</button>
+        <button id="createBtn" class="navBtn" type="button">Create climb</button>
+      </nav>
+    </header>
+
+    <main class="layout">
+      <!-- HOME VIEW -->
+      <section id="homeView" class="card">
+        <div class="cardHeader">
+          <div>
+            <div class="cardTitle">All climbs</div>
+            <div class="cardSub">Create climbs on your setter device. Download climbs.json for GitHub.</div>
+          </div>
+          <div class="rightActions">
+            <button id="downloadClimbsBtn" type="button">Download climbs.json</button>
+            <button id="exportClimbsBtn" type="button">Export to box</button>
+            <button id="clearClimbsBtn" class="danger" type="button">Clear all</button>
+          </div>
+        </div>
+
+        <div id="climbList" class="climbList"></div>
+
+        <textarea
+          id="climbsExportBox"
+          class="exportBox"
+          readonly
+          placeholder="Export will appear here…"
+        ></textarea>
+      </section>
+
+      <!-- CREATE VIEW -->
+      <section id="createView" class="createLayout hidden">
+        <div class="boardWrap">
+          <div class="legend">
+            <span class="dot start"></span> Start
+            <span class="dot mid"></span> Intermediate
+            <span class="dot finish"></span> Finish
+            <span class="dot foot"></span> Foot
+          </div>
+
+          <div id="board" class="board">
+            <img id="boardImage" src="board.jpg" alt="Board" />
+            <!-- Markers injected here -->
+          </div>
+
+          <div class="creator">
+            <div class="creatorRow">
+              <label class="toggle">
+                <input id="editMode" type="checkbox" checked />
+                <span>Placement mode</span>
+              </label>
+
+              <div class="typePicker">
+                <button class="pick active" data-type="start" type="button">Start</button>
+                <button class="pick" data-type="mid" type="button">Intermediate</button>
+                <button class="pick" data-type="finish" type="button">Finish</button>
+                <button class="pick" data-type="foot" type="button">Foot</button>
+              </div>
+            </div>
+
+            <div class="formGrid">
+              <label class="field">
+                <span>Name</span>
+                <input id="climbName" placeholder="e.g., Garage Heater" />
+              </label>
+
+              <label class="field">
+                <span>Grade (V-scale)</span>
+                <input id="climbGrade" placeholder="e.g., V5" />
+              </label>
+
+              <label class="field">
+                <span>First ascent</span>
+                <input id="climbFA" placeholder="e.g., Alex (2025-12-21)" />
+              </label>
+
+              <label class="field full">
+                <span>Image path (auto-filled)</span>
+                <input id="climbImagePath" placeholder="e.g., climb-images/p001.png" />
+              </label>
+            </div>
+
+            <div class="creatorActions">
+              <button id="undoBtn" type="button">Undo</button>
+              <button id="clearBtn" type="button">Clear holds</button>
+              <button id="downloadImgBtn" type="button">Download climb image</button>
+              <button id="saveBtn" class="primary" type="button">Save climb</button>
+            </div>
+
+            <div class="hint">
+              Tip: Save the downloaded climb image into your repo folder <code>climb-images/</code>.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Lightbox -->
+      <div id="lightbox" class="lightbox hidden" role="dialog" aria-modal="true">
+        <div class="lightboxInner">
+          <button id="lightboxClose" class="lightboxClose" type="button">Close</button>
+          <img id="lightboxImg" alt="Climb image" />
+        </div>
+      </div>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
